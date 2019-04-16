@@ -58,7 +58,7 @@ proces* alocareProces() {
 	p = (proces*)calloc(1, sizeof(proces));
 	if (p == NULL) {
 		printf("Nu s-a putut aloca procesul!\n");
-		return;
+		return NULL;
 	}
 	p->stiva = (Stack*)calloc(1, sizeof(Stack));
 	if (!p->stiva) return NULL;
@@ -156,6 +156,7 @@ int determinarePID(int** vect_PID) {
 			(*vect_PID)[i] = 1;
 			return i;
 		}
+    return -1;
 }
 
 void adaugaMemorie(Memorie** memorie, proces** proces_nou) {
@@ -168,6 +169,16 @@ void adaugaMemorie(Memorie** memorie, proces** proces_nou) {
 	}
 	else {
 		Memorie* aux = (*memorie);
+        if(aux->info->mem_start != NULL){
+            if((*proces_nou)->mem_size <= aux->urm->info->mem_start){
+                Memorie* swap = (Memorie*)calloc(1, sizeof(Memorie));
+				swap->info = proces_nou;
+				swap->info->mem_start = 0;
+				swap->urm = aux->urm;
+				aux->urm = swap;
+				return;
+            }
+        }
 		while (aux->urm != NULL) {
 			if ((*proces_nou)->mem_size <= (aux->urm->info->mem_start - (aux->info->mem_size + aux->info->mem_start))) {
 				Memorie* swap = (Memorie*)calloc(1, sizeof(Memorie));
@@ -381,7 +392,26 @@ void introducereQ(Queue** Q, proces* pr) {
 	(*Q) = coada_noua;
 }
 
-void run(int timp, int cuantum_timp, Queue **coada_asteptare, celula **running, Queue **coada_finished) {
+void remove_memorie(int PID, Memorie **memorie){
+    Memorie * aux = (*memorie);
+
+    if((proces*)aux->info->PID == PID){
+        (*memorie) = (*memorie)->urm;
+        return;
+    }
+    else{
+        aux = aux->urm;
+        while(aux->urm!=NULL){
+            if(PID == (proces*)aux->urm->info->PID){
+                aux->urm = aux ->urm ->urm;
+                return;
+            }
+            aux = aux->urm;
+        }
+    }
+}
+
+void run(int timp, int cuantum_timp, Queue **coada_asteptare, celula **running, Queue **coada_finished, Memorie** memorie) {
 
 	celula* aux = (*running);
 	celula* aux_nou = (*running);
@@ -396,10 +426,11 @@ void run(int timp, int cuantum_timp, Queue **coada_asteptare, celula **running, 
 					aux_nou = aux;
 					if ((*coada_asteptare)->front != NULL && (*coada_asteptare)->rear != NULL) {
 						aux = extrQ(*coada_asteptare);
-						introducereQ(coada_asteptare, (proces*)aux_nou->info, sizeof(proces));
+						introducereQ(coada_asteptare, (proces*)aux_nou->info);
 					}
 				}
 				else {
+                    remove_memorie(((proces*)aux->info->)PID, memorie);
 					intrQ(coada_finished, (proces*)aux->info, sizeof(proces));
 					aux = extrQ(*coada_asteptare);
 				}
@@ -411,10 +442,11 @@ void run(int timp, int cuantum_timp, Queue **coada_asteptare, celula **running, 
 					aux_nou = aux;
 					if ((*coada_asteptare)->front != NULL && (*coada_asteptare)->rear != NULL) {
 						aux = extrQ(*coada_asteptare);
-						introducereQ(coada_asteptare, (proces*)aux_nou->info, sizeof(proces));
+						introducereQ(coada_asteptare, (proces*)aux_nou->info);
 					}
 				}
 				else {
+                    remove_memorie((proces*)aux->info->PID, memorie);
 					intrQ(coada_finished, (proces*)aux->info, sizeof(proces));
 					aux = extrQ(*coada_asteptare);
 				}
@@ -426,7 +458,7 @@ void run(int timp, int cuantum_timp, Queue **coada_asteptare, celula **running, 
 					aux_nou = aux;
 					if ((*coada_asteptare)->front != NULL && (*coada_asteptare)->rear != NULL) {
 						aux = extrQ(*coada_asteptare);
-						introducereQ(coada_asteptare, (proces*)aux_nou->info, sizeof(proces));
+						introducereQ(coada_asteptare, (proces*)aux_nou->info);
 					}
 				}
 				else {
@@ -439,6 +471,7 @@ void run(int timp, int cuantum_timp, Queue **coada_asteptare, celula **running, 
 			if (timp - (((proces*)aux->info)->timp_executie) == 0) {
 				((proces*)aux->info)->timp_executie = 0;
 				((proces*)aux->info)->timp_executat += timp;
+				remove_memorie((proces*)aux->info->PID, memorie);
 				intrQ(coada_finished, (proces*)aux->info, sizeof(proces));
 				aux = extrQ(*coada_asteptare);
 				break;
@@ -453,6 +486,7 @@ void run(int timp, int cuantum_timp, Queue **coada_asteptare, celula **running, 
 				((proces*)aux->info)->timp_executat += ((proces*)aux->info)->timp_executie;
 				timp -= ((proces*)aux->info)->timp_executie;
 				((proces*)aux->info)->timp_executie = 0;
+				remove_memorie((proces*)aux->info->PID, memorie);
 				intrQ(coada_finished, (proces*)aux->info, sizeof(proces));
 				aux = extrQ(*coada_asteptare);
 			}
@@ -462,6 +496,7 @@ void run(int timp, int cuantum_timp, Queue **coada_asteptare, celula **running, 
 				((proces*)aux->info)->timp_executie = 0;
 				((proces*)aux->info)->timp_executat += cuantum_timp;
 				((proces*)aux->info)->cuantum_timp = cuantum_timp;
+				remove_memorie((proces*)aux->info->PID, memorie);
 				intrQ(coada_finished, (proces*)aux->info, sizeof(proces));
 				aux = extrQ(*coada_asteptare);
 				timp -= cuantum_timp;
@@ -474,13 +509,14 @@ void run(int timp, int cuantum_timp, Queue **coada_asteptare, celula **running, 
 				aux_nou = aux;
 				if ((*coada_asteptare)->front != NULL && (*coada_asteptare)->rear != NULL) {
 					aux = extrQ(*coada_asteptare);
-					introducereQ(coada_asteptare, (proces*)aux_nou->info, sizeof(proces));
+					introducereQ(coada_asteptare, (proces*)aux_nou->info);
 				}
 			}
 			else {
 				((proces*)aux->info)->timp_executat += ((proces*)aux->info)->timp_executie;
 				timp -= ((proces*)aux->info)->timp_executie;
 				((proces*)aux->info)->timp_executie = 0;
+				remove_memorie((proces*)aux->info->PID, memorie);
 				intrQ(coada_finished, (proces*)aux->info, sizeof(proces));
 				aux = extrQ(*coada_asteptare);
 			}
@@ -545,7 +581,7 @@ void printStack(Memorie** memorie, int PID) {
 					info = info->urm;
 				}
 				printf("%d.\n", (int)info->info);
-			}	
+			}
 			break;
 		}
 		aux = aux->urm;
@@ -553,7 +589,7 @@ void printStack(Memorie** memorie, int PID) {
 }
 
 void pop(Memorie** memorie, int PID) {
-	
+
 	Memorie* aux = (*memorie);
 	while (aux != NULL) {
 		if (aux->info->PID == PID) {
@@ -621,7 +657,7 @@ int main() {
 		if (strcmp(p, "run") == 0) {
 			p = strtok(NULL, " ");
 			int timp = atoi(p);
-			run(timp, cuantum_timp, &coada_asteptare, &running, &coada_finished);
+			run(timp, cuantum_timp, &coada_asteptare, &running, &coada_finished, &memorie);
 		}
 		if (strcmp(p, "finish") == 0) {
 			finish(coada_asteptare, running);
